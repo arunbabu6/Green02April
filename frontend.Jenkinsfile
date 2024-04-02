@@ -194,34 +194,35 @@ pipeline {
     
         stage('Trivy Vulnerability Scan') {
             agent any
-            steps {
-                script {
-                // Wrapping the SSH commands in a single SSH session
-                sshagent(['jenkinaccess']) {
-                // Execute Trivy scan without JSON format and echo the scanning process
-                // Directly output to the Jenkins console log for readability
-                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
-                echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
-                trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
+                steps {
+                    script {
+                        // Wrapping the SSH commands in a single SSH session
+                        sshagent(['jenkinaccess']) {
+                        // Execute Trivy scan to download the database only once
+                        sh "ssh ab@host.docker.internal 'trivy image --download-db-only'"
 
-                
-                // Optional: If you want to save the table output to a file for archiving
-                // You need to redirect the output of the Trivy command to a file in the remote system
-                // And then use scp to transfer it back to Jenkins
-                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
-                trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
-                sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt ."
-                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
-                echo \"Scanning a sonarqube image with Trivy...\" && \
-                trivy image sonarqube > > \"/opt/docker-green/Trivy/trivy-report-table--sonarqube${env.BUILD_NUMBER}.txt\"'"
-                sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--sonarqube${env.BUILD_NUMBER}.txt ."
+                        // Scan for the specific project image and directly output to console for readability
+                        sh "ssh ab@host.docker.internal 'echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
+                        trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
 
-                // Archive the table format output for records, if you've saved it to a file
-                archiveArtifacts artifacts: "trivy-report-table--${env.BUILD_NUMBER}.txt", onlyIfSuccessful: true
-            }
+                        // Save the table output to a file for the specific project image
+                        sh "ssh ab@host.docker.internal 'trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
+                        // Transfer the project image scan result back to Jenkins
+                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt ."
+
+                        // Repeat the process for the sonarqube image
+                        sh "ssh ab@host.docker.internal 'echo \"Scanning a SonarQube image with Trivy...\" && \
+                        trivy image sonarqube > \"/opt/docker-green/Trivy/trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt\"'"
+                        // Transfer the SonarQube image scan result back to Jenkins
+                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt ."
+
+                        // Archive both sets of the table format output for records
+                        archiveArtifacts artifacts: "trivy-report-table--${env.BUILD_NUMBER}.txt, trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt", onlyIfSuccessful: true
+                        }
+                    }
+                }
         }
-    }
-}
+
 
 
 
