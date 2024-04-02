@@ -107,7 +107,7 @@ pipeline {
             agent any
             steps {
                 dir('client') {
-                     Run Jest tests with coverage
+                    // Run Jest tests with coverage
                      sh 'npm test -- --coverage'
                 }
             }
