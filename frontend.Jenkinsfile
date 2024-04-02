@@ -80,23 +80,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Prepare and Build') {
-            agent any
-            steps {
-                script {
-                    unstash 'client-src'
-                    dir('client') {
-                        // Assuming the build commands are here [ @Chandan verify this]
-                        sh 'npm install'
-                        sh 'npm run build'
-                        // Stash the build artifacts, excluding the node_modules directory
-                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifacts'
-                    }
-                }
-            }
-        }
-
         stage('Check Node version') {
             steps {
                 sh 'node --version'
@@ -131,6 +114,24 @@ pipeline {
                 }
             }
         }
+        
+        stage('Prepare and Build') {
+            agent any
+            steps {
+                script {
+                    unstash 'client-src'
+                    dir('client') {
+                        // Assuming the build commands are here [ @Chandan verify this]
+                        sh 'npm install'
+                        sh 'npm run build'
+                        // Stash the build artifacts, excluding the node_modules directory
+                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifacts'
+                    }
+                }
+            }
+        }
+
+
 
         stage('Snyk Security Scan') {
             agent any
