@@ -91,6 +91,7 @@ pipeline {
             steps {
                 dir('client') {
                     // Run Jest tests with coverage
+                     sh 'npm install'
                      sh 'npm test -- --coverage'
                 }
             }
@@ -114,7 +115,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Prepare and Build') {
             agent any
             steps {
@@ -344,3 +345,5 @@ pipeline {
         }
     }
 }
+
+
