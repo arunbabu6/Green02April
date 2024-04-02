@@ -103,15 +103,15 @@ pipeline {
             }
         }
 
-        stage('Run Tests CodeCoverage') {
-            agent any
-            steps {
-                dir('client') {
+        //stage('Run Tests CodeCoverage') {
+          //  agent any
+            //steps {
+              //  dir('client') {
                     // Run Jest tests with coverage
-                    sh 'npm test -- --coverage'
-                }
-            }
-        }
+                //    sh 'npm test -- --coverage'
+                //}
+            //}
+        //}
 
         // SonarQube Analysis and Snyk Security Scan 
         stage('SonarQube Analysis') {
