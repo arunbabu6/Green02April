@@ -80,6 +80,11 @@ pipeline {
                 }
             }
         }
+stage('Check Node version') {
+    steps {
+        sh 'node --version'
+    }
+}
 
         stage('Prepare and Build') {
             agent any
