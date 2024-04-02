@@ -206,25 +206,23 @@ pipeline {
                         trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
 
                         // Save the table output to a file for the specific project image
-                        sh "ssh ab@host.docker.internal 'trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
+                        sh "ssh ab@host.docker.internal 'trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} | iconv -f ORIGINAL_ENCODING -t UTF-8 > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
                         // Transfer the project image scan result back to Jenkins
                         sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt ."
 
                         // Repeat the process for the sonarqube image
                         sh "ssh ab@host.docker.internal 'echo \"Scanning a SonarQube image with Trivy...\" && \
-                        trivy image sonarqube > \"/opt/docker-green/Trivy/trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt\"'"
+                        trivy image sonarqube | iconv -f ORIGINAL_ENCODING -t UTF-8 > \"/opt/docker-green/Trivy/trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt\"'"
                         // Transfer the SonarQube image scan result back to Jenkins
                         sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt ."
 
                         // Archive both sets of the table format output for records
                         archiveArtifacts artifacts: "trivy-report-table--${env.BUILD_NUMBER}.txt, trivy-report-table--sonarqube-${env.BUILD_NUMBER}.txt", onlyIfSuccessful: true
+                        
                         }
                     }
                 }
         }
-
-
-
 
         stage('Deploy') {      
             agent any  
