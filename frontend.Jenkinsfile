@@ -35,6 +35,18 @@ pipeline {
             }
         }
 
+        stage('Set Node Version') {
+            steps {
+                script {
+                    // Load NVM
+                    sh 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+                    // Use Node.js 16
+                    sh 'nvm use 16'
+                    // Check Node version
+                    sh 'node --version'
+                }
+            }
+        }
         stage('Checkout Code') {
             agent any
             steps {
@@ -80,11 +92,6 @@ pipeline {
                 }
             }
         }
-stage('Check Node version') {
-    steps {
-        sh 'node --version'
-    }
-}
 
         stage('Prepare and Build') {
             agent any
@@ -107,7 +114,7 @@ stage('Check Node version') {
             steps {
                 dir('client') {
                     // Run Jest tests with coverage
-                    sh 'npm test --coverage'
+                    sh 'npm test -- --coverage'
                 }
             }
         }
@@ -341,5 +348,3 @@ stage('Check Node version') {
         }
     }
 }
-
-
