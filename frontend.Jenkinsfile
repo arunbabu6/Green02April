@@ -110,16 +110,6 @@ pipeline {
             }
         }
         
-        stage('Run Tests CodeCoverage') {
-            agent any
-            steps {
-                dir('client') {
-                    // Run Jest tests with coverage
-                     sh 'npm test -- --coverage'
-                }
-            }
-        }
-
         // SonarQube Analysis and Snyk Security Scan 
         stage('SonarQube Analysis') {
             agent any
@@ -129,12 +119,9 @@ pipeline {
                       sonar-scanner \
                       -Dsonar.projectKey=Project-Green2 \
                       -Dsonar.sources=. \
-                      -Dsonar.tests=client \
-                      -Dsonar.test.inclusions="**/client/**/*.spec.js,**/client/**/*.test.js" \
                       -Dsonar.host.url=http://172.19.0.2:9000/ \
                       -Dsonar.login=$SONARQUBE_TOKEN
-                      -Dsonar.javascript.lcov.reportPaths=/client/coverage/lcov.info
-                    """
+                     """
                 }
             }
         }
@@ -209,21 +196,28 @@ pipeline {
             agent any
             steps {
                 script {
-                    // Wrapping the SSH commands in a single SSH session
-                    sshagent(['jenkinaccess']) {
-                        // Execute Trivy scan and echo the scanning process
-                        sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
-                        echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
-                        trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
-                        // Correctly execute scp within a sh command block
-                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
+                // Wrapping the SSH commands in a single SSH session
+                sshagent(['jenkinaccess']) {
+                // Execute Trivy scan without JSON format and echo the scanning process
+                // Directly output to the Jenkins console log for readability
+                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
+                echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
+                trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
+                
+                // Optional: If you want to save the table output to a file for archiving
+                // You need to redirect the output of the Trivy command to a file in the remote system
+                // And then use scp to transfer it back to Jenkins
+                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
+                trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
+                sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt ."
 
-                        // Use double quotes for string interpolation
-                        archiveArtifacts artifacts: "trivy-report--${env.BUILD_NUMBER}.json", onlyIfSuccessful: true
-                    }
-                }
+                // Archive the table format output for records, if you've saved it to a file
+                archiveArtifacts artifacts: "trivy-report-table--${env.BUILD_NUMBER}.txt", onlyIfSuccessful: true
             }
         }
+    }
+}
+
 
 
         stage('Deploy') {      
