@@ -86,12 +86,35 @@ pipeline {
             }
         }
 
+        stage('Prepare and Build') {
+            agent any
+            steps {
+                script {
+                    unstash 'client-src'
+                    dir('client') {
+                        // Assuming the build commands are here [ @Chandan verify this]
+                        sh 'npm install'
+                        sh 'npm run build'
+                        // Stash the build artifacts, excluding the node_modules directory
+                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifacts'
+                    }
+                }
+            }
+        }
+
+        stage('Install Test Dependencies') {
+            steps {
+             script {
+                sh 'npm install --save-dev babel-jest @babel/preset-env @babel/preset-react'
+                }
+            }
+        }
+        
         stage('Run Tests CodeCoverage') {
             agent any
             steps {
                 dir('client') {
                     // Run Jest tests with coverage
-                     sh 'npm install'
                      sh 'npm test -- --coverage'
                 }
             }
@@ -115,24 +138,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Prepare and Build') {
-            agent any
-            steps {
-                script {
-                    unstash 'client-src'
-                    dir('client') {
-                        // Assuming the build commands are here [ @Chandan verify this]
-                        sh 'npm install'
-                        sh 'npm run build'
-                        // Stash the build artifacts, excluding the node_modules directory
-                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifacts'
-                    }
-                }
-            }
-        }
-
-
 
         stage('Snyk Security Scan') {
             agent any
@@ -345,5 +350,3 @@ pipeline {
         }
     }
 }
-
-
