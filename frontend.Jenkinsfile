@@ -122,11 +122,8 @@ pipeline {
                       sonar-scanner \
                       -Dsonar.projectKey=Project-Green2 \
                       -Dsonar.sources=. \
-                      -Dsonar.tests=client \
-                      -Dsonar.test.inclusions="**/client/**/*.spec.js,**/client/**/*.test.js" \
                       -Dsonar.host.url=http://172.19.0.2:9000/ \
                       -Dsonar.login=$SONARQUBE_TOKEN
-                      -Dsonar.javascript.lcov.reportPaths=/client/coverage/lcov.info
                     """
                 }
             }
