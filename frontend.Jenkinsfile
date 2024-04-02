@@ -34,6 +34,21 @@ pipeline {
                 }
             }
         }
+       
+        stage('Set Node Version') {
+            steps {
+                script {
+                    // Assuming NVM is installed, use it to set the desired Node.js version
+                    sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  // This loads NVM
+                    nvm install 16  // This installs Node.js version 16 if not already installed
+                    nvm use 16  // This switches to Node.js version 16
+                    node --version
+                    '''
+                }
+            }
+        }
 
         stage('Checkout Code') {
             agent any
