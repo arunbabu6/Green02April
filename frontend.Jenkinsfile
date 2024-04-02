@@ -102,7 +102,7 @@ pipeline {
             steps {
                 dir('client') {
                     // Run Jest tests with coverage
-                    sh 'npm test -- --coverage'
+                    sh 'npm test --coverage'
                 }
             }
         }
@@ -336,3 +336,5 @@ pipeline {
         }
     }
 }
+
+
