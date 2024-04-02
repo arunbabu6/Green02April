@@ -203,6 +203,7 @@ pipeline {
                 sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
                 echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
                 trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
+
                 
                 // Optional: If you want to save the table output to a file for archiving
                 // You need to redirect the output of the Trivy command to a file in the remote system
@@ -210,6 +211,10 @@ pipeline {
                 sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
                 trivy image ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} > \"/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt\"'"
                 sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--${env.BUILD_NUMBER}.txt ."
+                sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
+                echo \"Scanning a sonarqube image with Trivy...\" && \
+                trivy image sonarqube > > \"/opt/docker-green/Trivy/trivy-report-table--sonarqube${env.BUILD_NUMBER}.txt\"'"
+                sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report-table--sonarqube${env.BUILD_NUMBER}.txt ."
 
                 // Archive the table format output for records, if you've saved it to a file
                 archiveArtifacts artifacts: "trivy-report-table--${env.BUILD_NUMBER}.txt", onlyIfSuccessful: true
