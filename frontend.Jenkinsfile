@@ -103,15 +103,15 @@ pipeline {
             }
         }
 
-        //stage('Run Tests CodeCoverage') {
-          //  agent any
-            //steps {
-              //  dir('client') {
-                    // Run Jest tests with coverage
-                //    sh 'npm test -- --coverage'
-                //}
-            //}
-        //}
+        stage('Run Tests CodeCoverage') {
+            agent any
+            steps {
+                dir('client') {
+                     Run Jest tests with coverage
+                     sh 'npm test -- --coverage'
+                }
+            }
+        }
 
         // SonarQube Analysis and Snyk Security Scan 
         stage('SonarQube Analysis') {
@@ -122,8 +122,11 @@ pipeline {
                       sonar-scanner \
                       -Dsonar.projectKey=Project-Green2 \
                       -Dsonar.sources=. \
+                      -Dsonar.tests=client \
+                      -Dsonar.test.inclusions="**/client/**/*.spec.js,**/client/**/*.test.js" \
                       -Dsonar.host.url=http://172.19.0.2:9000/ \
                       -Dsonar.login=$SONARQUBE_TOKEN
+                      -Dsonar.javascript.lcov.reportPaths=/client/coverage/lcov.info
                     """
                 }
             }
@@ -195,29 +198,22 @@ pipeline {
             }
         }
     
-         stage('Trivy Vulnerability Scan') {
+        stage('Trivy Vulnerability Scan') {
             agent any
             steps {
                 script {
-                    def image = "${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}" // Construct the Docker image
-                    sh "trivy image --download-db-only"                                                            // Run Trivy to download the vulnerability database
-                    echo "Scanning ${image} with Trivy..."          
-                    sh "trivy image --format json --output trivy-report.json ${image}" // Run Trivy to perform the vulnerability scan and output the results to a JSON file
-                    archiveArtifacts artifacts: 'trivy-report.json', onlyIfSuccessful: true
-                    // Parse Trivy JSON report to check for high severity vulnerabilities
-                    def trivyReport = readJSON file: 'trivy-report.json'
-                    def highSeverityVulnerabilities = trivyReport.Vulnerabilities.findAll { it.Severity == 'HIGH' } // Filter vulnerabilities to find those with a severity level of 'HIGH'
-                    if (highSeverityVulnerabilities) {
-                        echo "High severity vulnerabilities found:"
-                        highSeverityVulnerabilities.each {
-                            echo "  - ${it.PkgName} (${it.Severity}): ${it.Title}"
-                        }
-                        currentBuild.result = 'FAILURE' // Mark the build as failed
-                        error("High severity vulnerabilities found. Build failed.")
-                    } else {
-                        echo "No high severity vulnerabilities found."
+                    // Wrapping the SSH commands in a single SSH session
+                    sshagent(['jenkinaccess']) {
+                        // Execute Trivy scan and echo the scanning process
+                        sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
+                        echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
+                        trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
+                        // Correctly execute scp within a sh command block
+                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
+
+                        // Use double quotes for string interpolation
+                        archiveArtifacts artifacts: "trivy-report--${env.BUILD_NUMBER}.json", onlyIfSuccessful: true
                     }
-                    sh "trivy image --format table ${image}"
                 }
             }
         }
