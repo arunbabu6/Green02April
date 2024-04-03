@@ -2,13 +2,12 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'arunthopil/pro-green-v2'
+        DOCKER_IMAGEE = 'arunthopil/pro-green-v2' // Corrected variable name
         SONARQUBE_TOKEN = credentials('sonar-docker')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub1')
+        MONGO_URI = credentials('MONGO_URI')
         // SSH credentials for each environment
         PROJECT_DIR = '/opt/docker-green'
-      //  STACKHAWK_APP_ID = credentials('STACKHAWK_APP_ID')
-        //STACKHAWK_API_KEY = credentials('STACKHAWK_API_KEY')
     }
 
     stages {
@@ -20,17 +19,7 @@ pipeline {
                                   BRANCH_NAME == 'production' ? 'Production' :
                                   BRANCH_NAME == 'staging' ? 'Staging' :
                                   BRANCH_NAME.startsWith('test') ? 'Testing' : 'Development'
-                                // Dynamically set STACKHAWK_HOST based on branch name
-                    env.STACKHAWK_HOST = BRANCH_NAME == 'main' ? 'http://localhost:8090/' :
-                                         BRANCH_NAME == 'staging' ? 'https://staging.globalgreeninit.world' :
-                                         BRANCH_NAME == 'production' ? 'https://production.globalgreeninit.world' :
-                                         BRANCH_NAME == 'testing' ? 'https://testing.globalgreeninit.world' :
-                                 'https://dev.example.com'
-                    // Dynamically set STACKHAWK_ENV based on the ENVIRONMENT variable
-                    env.STACKHAWK_ENV = env.ENVIRONMENT             
                     echo "Environment set to ${env.ENVIRONMENT}"
-                    echo "StackHawk host set to ${env.STACKHAWK_HOST}"
-                    echo "StackHawk environment set to ${env.STACKHAWK_ENV}"
                 }
             }
         }
@@ -61,7 +50,7 @@ pipeline {
                 script {
                     if (currentBuild.previousBuild != null && currentBuild.previousBuild.result == 'SUCCESS') {
                         try { 
-                            copyArtifacts(projectName: "green2/main", selector: lastSuccessful(), filter: 'lint-results.txt');
+                            copyArtifacts(projectName: "For-Green2/main", selector: lastSuccessful(), filter: 'lint-results.txt');
                         } catch (Exception e) {
                             echo "Warning: Failed to copy artifacts. Proceeding without them."
                         }
@@ -72,11 +61,11 @@ pipeline {
             }
         }
 
-        stage('Stash Client') {
+        stage('Stash Backend') {
             agent any
             steps {
-                dir('client') {
-                    stash includes: '**', name: 'client-src'
+                dir('backend') {
+                    stash includes: '**', name: 'backend-src'
                 }
             }
         }
@@ -85,33 +74,45 @@ pipeline {
             agent any
             steps {
                 script {
-                    unstash 'client-src'
-                    dir('client') {
+                    unstash 'backend-src'
+                    dir('backend') {
                         // Assuming the build commands are here [ @Chandan verify this]
+                    //    sh 'cp ${WORKSPACE}/.env .'
                         sh 'npm install'
-                        sh 'npm run build'
                         // Stash the build artifacts, excluding the node_modules directory
-                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifacts'
+                        stash excludes: 'node_modules/**', includes: '**', name: 'build-artifactsb'
                     }
                 }
             }
         }
 
-        stage('Check Node version') {
+        stage('Generate Documentation') {
+            agent any
             steps {
-                sh 'node --version'
-            }
+                script {
+                    // Create a temporary directory in the Jenkins workspace to hold the unstashed files
+                    sh "mkdir -p temp_backend"
+                    // Unstash the backend source code into this temporary directory
+                    dir('temp_backend') {
+                        unstash 'backend-src'
+                    }
+                    // Copy the source code specifically to the 'backenddocs' directory on the Docker host
+                    sshagent(['jenkinaccess']) {
+                        sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh ab@host.docker.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "scp -rp temp_backend/* ab@host.docker.internal:${PROJECT_DIR}/backenddocs"
+                        // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
+                        sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
+                        // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
+                        sh "scp -rp ab@host.docker.internal:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
+                    }
+                    // Archiving the documentation if copied back
+                    archiveArtifacts artifacts: 'docs-backend/**', allowEmptyArchive: true
+                }
         }
+    }
 
-        //stage('Run Tests CodeCoverage') {
-          //  agent any
-            //steps {
-              //  dir('client') {
-                    // Run Jest tests with coverage
-                //    sh 'npm test -- --coverage'
-                //}
-            //}
-        //}
+
 
         // SonarQube Analysis and Snyk Security Scan 
         stage('SonarQube Analysis') {
@@ -120,9 +121,9 @@ pipeline {
                 withSonarQubeEnv('Sonarqube') { // 'Sonarcube-cred' from |should match the SonarQube configuration in Jenkins
                     sh """
                       sonar-scanner \
-                      -Dsonar.projectKey=Project-Green2 \
+                      -Dsonar.projectKey=Project-Green2-Backend \
                       -Dsonar.sources=. \
-                      -Dsonar.host.url=http://172.19.0.4:9000/ \
+                      -Dsonar.host.url=http://172.19.0.2:9000/ \
                       -Dsonar.login=$SONARQUBE_TOKEN
                     """
                 }
@@ -134,7 +135,7 @@ pipeline {
             steps {
                 dir('client') {
         //        snykSecurity failOnError: false, failOnIssues: false, organisation: 'arunbabu6', projectName: 'For-Green2', snykInstallation: 'Snyk', snykTokenId: 'snyk-token', targetFile: 'package.json'
-                snykSecurity failOnError: false, failOnIssues: false, organisation: 'arunbabu6', projectName: 'For-Green2', snykInstallation: 'Snyk', snykTokenId: 'snyk-token'
+                snykSecurity failOnError: false, failOnIssues: false, organisation: 'arunbabu6', projectName: 'For-Green2-Backend', snykInstallation: 'Snyk', snykTokenId: 'snyk-token'
                 }
 
             }
@@ -171,30 +172,33 @@ pipeline {
             steps {
                 script {
                     // Create a directory 'artifacts' in the Jenkins workspace to hold the unstashed files
-                    sh "mkdir -p artifacts"
-                    dir('artifacts') {
+                    sh "mkdir -p artifactsb"
+                    dir('artifactsb') {
                         // Unstash the build artifacts into this 'artifacts' directory
-                        unstash 'build-artifacts'
+                        unstash 'build-artifactsb'
                         }
                         sshagent(['jenkinaccess']) {
                             // Clear the 'artifacts' directory on the Docker host
-                            sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/artifacts/*'"
-                            sh "scp -rp artifacts/* ab@host.docker.internal:${PROJECT_DIR}/artifacts/"
+                            sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
+                            sh "scp -rp artifactsb/* ab@host.docker.internal:${PROJECT_DIR}/artifactsb/"
+                            sh "ssh ab@host.docker.internal 'ls -la ${PROJECT_DIR}/artifactsb/'"
+
                             // Build the Docker image on the Docker host
-                            sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR} && docker build -t ${env.DOCKER_IMAGE}-backend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} .'"
+                            sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
+
                         }
                         // Log in to DockerHub and push the image
                         withCredentials([usernamePassword(credentialsId: 'dockerhub1', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh """
                                 echo '${DOCKER_PASSWORD}' | ssh ab@host.docker.internal 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
-                                ssh ab@host.docker.internal 'docker push ${env.DOCKER_IMAGE}-backend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'
+                                ssh ab@host.docker.internal 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
                             """
                         }
 
                     }
             }
         }
-    
+
         stage('Trivy Vulnerability Scan') {
             agent any
             steps {
@@ -203,8 +207,8 @@ pipeline {
                     sshagent(['jenkinaccess']) {
                         // Execute Trivy scan and echo the scanning process
                         sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
-                        echo \"Scanning ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} with Trivy...\" && \
-                        trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}'"
+                        echo \"Scanning ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} with Trivy...\" && \
+                        trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'"
                         // Correctly execute scp within a sh command block
                         sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
 
@@ -221,56 +225,64 @@ pipeline {
                 script {
                     switch (ENVIRONMENT) {
                         case 'Demo':
+                        withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
                             sshagent(['jenkinaccess']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
-                                    docker pull ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} &&
-                                    docker stop projectname-frontend || true &&
-                                    docker rm projectname-frontend || true &&
-                                    docker run -d --name projectname-frontend -p 8090:80 ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}
+                                    docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
+                                    docker stop projectname-backend-v2 || true &&
+                                    docker rm projectname-backend-v2 || true &&
+                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
                                     '
-                            """
+                                """
                             }
-                            break
-                            
+                        }
+                        break
+              
                         case 'Testing':
+                        withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
                             sshagent(['jenkinaccess']) {
                                 sh """
-                                    ssh -o StrictHostKeyChecking=no ab@Testing-host.docker.internal '
-                                    docker pull ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} &&
-                                    docker stop projectname-frontend || true &&
-                                    docker rm projectname-frontend || true &&
-                                    docker run -d --name projectname-frontend -p 8090:80 ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}
+                                    ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
+                                    docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
+                                    docker stop projectname-backend-v2 || true &&
+                                    docker rm projectname-backend-v2 || true &&
+                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
                                     '
-                            """
+                                """
                             }
-                            break
+                        }
+                        break
                            
-                        case 'Staging':
-                            sshagent(['jenkinaccess']) {
-                                sh """
-                                    ssh -o StrictHostKeyChecking=no ab@Staging-host.docker.internal '
-                                    docker pull ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} &&
-                                    docker stop projectname-frontend || true &&
-                                    docker rm projectname-frontend || true &&
-                                    docker run -d --name projectname-frontend -p 8090:80 ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}
-                                    '
-                                    """
-                                }
-                            break
-                            
                         case 'Production':
+                        withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
                             sshagent(['jenkinaccess']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@Production-host.docker.internal '
-                                    docker pull ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER} &&
-                                    docker stop projectname-frontend || true &&
-                                    docker rm projectname-frontend || true &&
-                                    docker run -d --name projectname-frontend -p 8090:80 ${env.DOCKER_IMAGE}-frontend:${env.ENVIRONMENT.toLowerCase()}-${env.BUILD_NUMBER}
+                                    docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
+                                    docker stop projectname-backend-v2 || true &&
+                                    docker rm projectname-backend-v2 || true &&
+                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI=MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
                                     '
-                            """
+                                """
                             }
-                            break
+                        }
+                        break
+                            
+                        case 'Staging':
+                        withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
+                            sshagent(['jenkinaccess']) {
+                                sh """
+                                    ssh -o StrictHostKeyChecking=no ab@Staging-host.docker.internal '
+                                    docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
+                                    docker stop projectname-backend-v2 || true &&
+                                    docker rm projectname-backend-v2 || true &&
+                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
+                                    '
+                                """
+                            }
+                        }
+                        break
                             
                         default:
                             echo "Environment configuration not found"
@@ -281,20 +293,19 @@ pipeline {
                 }
             }
         }
-    
-}
+    }
 
     post {
         always {
             script{
-                             
+                   
                 if (env.ENVIRONMENT) {
                     echo "Pipeline execution completed for ${env.ENVIRONMENT}"
-                } 
-                else {
+                } else {
                     echo "Pipeline execution completed, but ENVIRONMENT was not set."
                 }
             }
         }
     }
 }
+
