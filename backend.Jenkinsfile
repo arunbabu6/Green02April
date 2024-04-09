@@ -98,11 +98,11 @@ pipeline {
                     }
                     // Copy the source code specifically to the 'backenddocs' directory on the Docker host
                     sshagent(['sshtoaws']) {
-                        sh "ssh ubuntu@52.15.170.235 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-                        sh "ssh ubuntu@52.15.170.235 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
                         sh "scp -rp temp_backend/* ubuntu@52.15.170.235:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
-                        sh "ssh ubuntu@52.15.170.235 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
+                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
                         sh "scp -rp ubuntu@52.15.170.235:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
                     }
@@ -177,21 +177,21 @@ pipeline {
                         // Unstash the build artifacts into this 'artifacts' directory
                         unstash 'build-artifactsb'
                         }
-                        sshagent(['jenkinaccess']) {
+                        sshagent(['sshtoaws']) {
                             // Clear the 'artifacts' directory on the Docker host
-                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
+                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
                             sh "scp -rp artifactsb/* ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/artifactsb/"
-                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'ls -la ${PROJECT_DIR}/artifactsb/'"
+                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'ls -la ${PROJECT_DIR}/artifactsb/'"
 
                             // Build the Docker image on the Docker host
-                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
+                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
 
                         }
                         // Log in to DockerHub and push the image
                         withCredentials([usernamePassword(credentialsId: 'dockerhub1', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh """
-                                echo '${DOCKER_PASSWORD}' | ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
-                                ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
+                                echo '${DOCKER_PASSWORD}' | ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
+                                ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
                             """
                         }
 
@@ -206,7 +206,7 @@ pipeline {
                     // Wrapping the SSH commands in a single SSH session
                     sshagent(['jenkinaccess']) {
                         // Execute Trivy scan and echo the scanning process
-                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'trivy image --download-db-only && \
+                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'trivy image --download-db-only && \
                         echo \"Scanning ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} with Trivy...\" && \
                         trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'"
                         // Correctly execute scp within a sh command block
