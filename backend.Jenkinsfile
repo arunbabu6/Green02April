@@ -102,8 +102,7 @@ pipeline {
                         sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
                         sh "scp -v -rp temp_backend/* ubuntu@10.3.1.91:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
-                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'source ~/.nvm/nvm.sh && cd /opt/docker-green/backenddocs && /home/ubuntu/.nvm/versions/node/v21.7.2/bin/jsdoc -c jsdoc.conf.json -r . -d ./docs'
-"
+                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'source ~/.nvm/nvm.sh && cd /opt/docker-green/backenddocs && /home/ubuntu/.nvm/versions/node/v21.7.2/bin/jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
                         sh "scp -rp ubuntu@10.3.1.91:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
                     }
