@@ -178,7 +178,7 @@ pipeline {
                         sshagent(['sshtoaws']) {
                             // Clear the 'artifacts' directory on the Docker host
                             sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
-                            sh "scp -v -rp artifactsb/* ubuntu@ip-10-3-1-91:${PROJECT_DIR}/artifactsb/"
+                            sh "scp -v -rp artifactsb/* ubuntu@10.3.1.91:${PROJECT_DIR}/artifactsb/"
                             sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'ls -la ${PROJECT_DIR}/artifactsb/'"
 
                             // Build the Docker image on the Docker host
@@ -202,13 +202,13 @@ pipeline {
             steps {
                 script {
                     // Wrapping the SSH commands in a single SSH session
-                    sshagent(['jenkinaccess']) {
+                    sshagent(['sshtoaws']) {
                         // Execute Trivy scan and echo the scanning process
                         sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'trivy image --download-db-only && \
                         echo \"Scanning ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} with Trivy...\" && \
                         trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'"
                         // Correctly execute scp within a sh command block
-                        sh "scp ubuntu@ip-10-3-1-91.us-east-2.compute.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
+                        sh "scp ubuntu@10.3.1.91:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
 
                         // Use double quotes for string interpolation
                         archiveArtifacts artifacts: "trivy-report--${env.BUILD_NUMBER}.json", onlyIfSuccessful: true
@@ -224,7 +224,7 @@ pipeline {
                     switch (ENVIRONMENT) {
                         case 'Demo':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['jenkinaccess']) {
+                            sshagent(['sshtoaws']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
@@ -239,7 +239,7 @@ pipeline {
               
                         case 'Testing':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['jenkinaccess']) {
+                            sshagent(['sshtoaws']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
@@ -254,9 +254,9 @@ pipeline {
                            
                         case 'Production':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['jenkinaccess']) {
+                            sshagent(['sshtoaws']) {
                                 sh """
-                                    ssh -o StrictHostKeyChecking=no ubuntu@ip-10-2-1-235.us-east-2.compute.internal '
+                                    ssh -o StrictHostKeyChecking=no ubuntu@18.191.147.35 '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
                                     docker stop projectname-backend-v2 || true &&
                                     docker rm projectname-backend-v2 || true &&
@@ -269,7 +269,7 @@ pipeline {
                             
                         case 'Staging':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['jenkinaccess']) {
+                            sshagent(['sshtoaws']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@Staging-host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
