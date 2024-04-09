@@ -98,9 +98,9 @@ pipeline {
                     }
                     // Copy the source code specifically to the 'backenddocs' directory on the Docker host
                     sshagent(['sshtoaws']) {
-                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
-                        sh "scp -rp temp_backend/* ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/backenddocs"
+                        sh "ssh ubuntu@ip-10-3-1-91 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh ubuntu@ip-10-3-1-91 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "scp -rp temp_backend/* ubuntu@ip-10-3-1-91:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
                         sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
@@ -308,3 +308,4 @@ pipeline {
         }
     }
 }
+
