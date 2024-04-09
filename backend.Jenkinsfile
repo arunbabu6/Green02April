@@ -177,12 +177,12 @@ pipeline {
                         }
                         sshagent(['sshtoaws']) {
                             // Clear the 'artifacts' directory on the Docker host
-                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
-                            sh "scp -rp artifactsb/* ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/artifactsb/"
-                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'ls -la ${PROJECT_DIR}/artifactsb/'"
+                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
+                            sh "scp -v -rp artifactsb/* ubuntu@ip-10-3-1-91:${PROJECT_DIR}/artifactsb/"
+                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'ls -la ${PROJECT_DIR}/artifactsb/'"
 
                             // Build the Docker image on the Docker host
-                            sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
+                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
 
                         }
                         // Log in to DockerHub and push the image
@@ -306,3 +306,4 @@ pipeline {
         }
     }
 }
+
