@@ -18,7 +18,7 @@ pipeline {
                     env.ENVIRONMENT = BRANCH_NAME == 'main' ? 'Production' :
                                   BRANCH_NAME == 'development' ? 'Testing' :
                                   BRANCH_NAME == 'staging' ? 'Staging' :
-                                  BRANCH_NAME == 'devops' ? 'Demo'
+                                  BRANCH_NAME == 'devops' ? 'Demo' :
                     echo "Environment set to ${env.ENVIRONMENT}"
                 }
             }
