@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGEE = 'arunthopil/pro-green-v2' // Corrected variable name
-        SONARQUBE_TOKEN = credentials('sonar-docker')
+        SONARQUBE_TOKEN = credentials('sonar-aws')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub1')
         MONGO_URI = credentials('MONGO_URI')
         // SSH credentials for each environment
@@ -15,10 +15,10 @@ pipeline {
             agent any
             steps {
                 script {
-                    env.ENVIRONMENT = BRANCH_NAME == 'main' ? 'Demo' :
-                                  BRANCH_NAME == 'production' ? 'Production' :
+                    env.ENVIRONMENT = BRANCH_NAME == 'main' ? 'Production' :
+                                  BRANCH_NAME == 'development' ? 'Testing' :
                                   BRANCH_NAME == 'staging' ? 'Staging' :
-                                  BRANCH_NAME.startsWith('test') ? 'Testing' : 'Development'
+                                  BRANCH_NAME == 'devops' ? 'Demo'
                     echo "Environment set to ${env.ENVIRONMENT}"
                 }
             }
@@ -97,14 +97,14 @@ pipeline {
                         unstash 'backend-src'
                     }
                     // Copy the source code specifically to the 'backenddocs' directory on the Docker host
-                    sshagent(['jenkinaccess']) {
-                        sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-                        sh "ssh ab@host.docker.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
-                        sh "scp -rp temp_backend/* ab@host.docker.internal:${PROJECT_DIR}/backenddocs"
+                    sshagent(['sshtoaws']) {
+                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "scp -rp temp_backend/* ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
-                        sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
+                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
-                        sh "scp -rp ab@host.docker.internal:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
+                        sh "scp -rp ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
                     }
                     // Archiving the documentation if copied back
                     archiveArtifacts artifacts: 'docs-backend/**', allowEmptyArchive: true
@@ -121,7 +121,7 @@ pipeline {
                 withSonarQubeEnv('Sonarqube') { // 'Sonarcube-cred' from |should match the SonarQube configuration in Jenkins
                     sh """
                       sonar-scanner \
-                      -Dsonar.projectKey=Project-Green2-Backend \
+                      -Dsonar.projectKey=ProjectGreenBackend-Production \
                       -Dsonar.sources=. \
                       -Dsonar.host.url=http://172.19.0.4:9000/ \
                       -Dsonar.login=$SONARQUBE_TOKEN
@@ -166,32 +166,7 @@ pipeline {
                }
            }
         }
-        stage('Generate Documentation') {
-  steps {
-    script {
-      // Create a temporary directory in the Jenkins workspace to hold the unstashed files
-      sh "mkdir -p temp_backend"
-      // Unstash the backend source code into this temporary directory
-      dir('temp_backend') {
-        unstash 'backend-src'
-      }
-      // Copy the source code specifically to the 'backenddocs' directory on the Docker host
-      sshagent(['jenkinaccess']) {
-        sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-        sh "ssh ab@host.docker.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
-        sh "scp -rp temp_backend/* ab@host.docker.internal:${PROJECT_DIR}/backenddocs"
-        // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
-        sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
-        // Optionally archiving the generated documentation in Jenkins, copy it back from the Docker host
-        sh "scp -rp ab@host.docker.internal:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
-      }
-      // Archiving the documentation if copied back
-      archiveArtifacts artifacts: 'docs-backend/**', allowEmptyArchive: true
-    }
-  }
-}
-
-
+ 
         stage('Build and Push Docker Image') {
             agent any
             steps {
@@ -204,19 +179,19 @@ pipeline {
                         }
                         sshagent(['jenkinaccess']) {
                             // Clear the 'artifacts' directory on the Docker host
-                            sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
-                            sh "scp -rp artifactsb/* ab@host.docker.internal:${PROJECT_DIR}/artifactsb/"
-                            sh "ssh ab@host.docker.internal 'ls -la ${PROJECT_DIR}/artifactsb/'"
+                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
+                            sh "scp -rp artifactsb/* ubuntu@ip-10-3-1-91.us-east-2.compute.internal:${PROJECT_DIR}/artifactsb/"
+                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'ls -la ${PROJECT_DIR}/artifactsb/'"
 
                             // Build the Docker image on the Docker host
-                            sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
+                            sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
 
                         }
                         // Log in to DockerHub and push the image
                         withCredentials([usernamePassword(credentialsId: 'dockerhub1', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh """
-                                echo '${DOCKER_PASSWORD}' | ssh ab@host.docker.internal 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
-                                ssh ab@host.docker.internal 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
+                                echo '${DOCKER_PASSWORD}' | ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
+                                ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
                             """
                         }
 
@@ -231,11 +206,11 @@ pipeline {
                     // Wrapping the SSH commands in a single SSH session
                     sshagent(['jenkinaccess']) {
                         // Execute Trivy scan and echo the scanning process
-                        sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
+                        sh "ssh ubuntu@ip-10-3-1-91.us-east-2.compute.internal 'trivy image --download-db-only && \
                         echo \"Scanning ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} with Trivy...\" && \
                         trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'"
                         // Correctly execute scp within a sh command block
-                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
+                        sh "scp ubuntu@ip-10-3-1-91.us-east-2.compute.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
 
                         // Use double quotes for string interpolation
                         archiveArtifacts artifacts: "trivy-report--${env.BUILD_NUMBER}.json", onlyIfSuccessful: true
@@ -283,7 +258,7 @@ pipeline {
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
                             sshagent(['jenkinaccess']) {
                                 sh """
-                                    ssh -o StrictHostKeyChecking=no ab@Production-host.docker.internal '
+                                    ssh -o StrictHostKeyChecking=no ubuntu@ip-10-2-1-235.us-east-2.compute.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
                                     docker stop projectname-backend-v2 || true &&
                                     docker rm projectname-backend-v2 || true &&
@@ -333,3 +308,4 @@ pipeline {
         }
     }
 }
+
