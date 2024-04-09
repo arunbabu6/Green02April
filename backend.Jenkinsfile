@@ -98,9 +98,10 @@ pipeline {
                     }
                     // Copy the source code specifically to the 'backenddocs' directory on the Docker host
                     sshagent(['sshtoaws']) {
-                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
-                        sh "scp -rp temp_backend/* ubuntu@52.15.170.235:${PROJECT_DIR}/backenddocs"
+                        sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "scp -v -rp temp_backend/* ubuntu@52.15.170.235:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
                         sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@52.15.170.235 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
