@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGEE = 'arunthopil/pro-green-v2' // Corrected variable name
-        SONARQUBE_TOKEN = credentials('sonar-aws')
+        //SONARQUBE_TOKEN = credentials('sonar-aws')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub1')
         MONGO_URI = credentials('MONGO_URI')
         // SSH credentials for each environment
