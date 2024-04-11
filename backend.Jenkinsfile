@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGEE = 'arunthopil/pro-green-v2' // Corrected variable name
-        //SONARQUBE_TOKEN = credentials('sonar-aws')
+        SONARQUBE_TOKEN = credentials('sonar-docker')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub1')
         MONGO_URI = credentials('MONGO_URI')
         // SSH credentials for each environment
@@ -15,10 +15,10 @@ pipeline {
             agent any
             steps {
                 script {
-                    env.ENVIRONMENT = BRANCH_NAME == 'main' ? 'Production' :
-                                  BRANCH_NAME == 'development' ? 'Testing' :
+                    env.ENVIRONMENT = BRANCH_NAME == 'main' ? 'Demo' :
+                                  BRANCH_NAME == 'production' ? 'Production' :
                                   BRANCH_NAME == 'staging' ? 'Staging' :
-                                  BRANCH_NAME == 'devops' ? 'Demo' : 'Unknown'
+                                  BRANCH_NAME.startsWith('test') ? 'Testing' : 'Development'
                     echo "Environment set to ${env.ENVIRONMENT}"
                 }
             }
@@ -97,14 +97,14 @@ pipeline {
                         unstash 'backend-src'
                     }
                     // Copy the source code specifically to the 'backenddocs' directory on the Docker host
-                    sshagent(['sshtoaws']) {
-                        sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
-                        sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
-                        sh "scp -v -rp temp_backend/* ubuntu@10.3.1.91:${PROJECT_DIR}/backenddocs"
+                    sshagent(['jenkinaccess']) {
+                        sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/backenddocs/*'"
+                        sh "ssh ab@host.docker.internal 'mkdir ${PROJECT_DIR}/backenddocs/docs'"
+                        sh "scp -rp temp_backend/* ab@host.docker.internal:${PROJECT_DIR}/backenddocs"
                         // Generate the documentation on the Docker host, specifying the output within the same 'backenddocs' directory or a subdirectory of it for the generated docs
-                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'source ~/.nvm/nvm.sh && cd /opt/docker-green/backenddocs && /home/ubuntu/.nvm/versions/node/v21.7.2/bin/jsdoc -c jsdoc.conf.json -r . -d ./docs'"
+                        sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR}/backenddocs && jsdoc -c jsdoc.conf.json -r . -d ./docs'"
                         // Optionally archieving the generated documentation in Jenkins, copy it back from the Docker host
-                        sh "scp -rp ubuntu@10.3.1.91:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
+                        sh "scp -rp ab@host.docker.internal:${PROJECT_DIR}/backenddocs/docs ./docs-backend"
                     }
                     // Archiving the documentation if copied back
                     archiveArtifacts artifacts: 'docs-backend/**', allowEmptyArchive: true
@@ -112,20 +112,22 @@ pipeline {
         }
     }
 
+
+
         // SonarQube Analysis and Snyk Security Scan 
-       // stage('SonarQube Analysis') {
-         //   agent any
-           // steps {
-             //   withSonarQubeEnv('Sonarqube') { // 'Sonarcube-cred' from |should match the SonarQube configuration in Jenkins
-               //     sh """
-                 //     sonar-scanner \
-                   //   -Dsonar.projectKey=ProjectGreenBackend-Production \
-                     // -Dsonar.sources=. \
-                      //-Dsonar.host.url=http://172.19.0.4:9000/ \
-                      //-Dsonar.login=$SONARQUBE_TOKEN
-                    //"""
-                //}
-            //}
+    //    stage('SonarQube Analysis') {
+    //        agent any
+    //        steps {
+    //            withSonarQubeEnv('Sonarqube') { // 'Sonarcube-cred' from |should match the SonarQube configuration in Jenkins
+    //                sh """
+    //                  sonar-scanner \
+    //                  -Dsonar.projectKey=Project-Green2-Backend \
+    //                  -Dsonar.sources=. \
+    //                  -Dsonar.host.url=http://172.19.0.3:9000/ \
+    //                  -Dsonar.login=$SONARQUBE_TOKEN
+    //              """
+            //    }
+          //  }
         //}
 
         stage('Snyk Security Scan') {
@@ -175,21 +177,21 @@ pipeline {
                         // Unstash the build artifacts into this 'artifacts' directory
                         unstash 'build-artifactsb'
                         }
-                        sshagent(['sshtoaws']) {
+                        sshagent(['jenkinaccess']) {
                             // Clear the 'artifacts' directory on the Docker host
-                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
-                            sh "scp -v -rp artifactsb/* ubuntu@10.3.1.91:${PROJECT_DIR}/artifactsb/"
-                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'ls -la ${PROJECT_DIR}/artifactsb/'"
+                            sh "ssh ab@host.docker.internal 'rm -rf ${PROJECT_DIR}/artifactsb/*'"
+                            sh "scp -rp artifactsb/* ab@host.docker.internal:${PROJECT_DIR}/artifactsb/"
+                            sh "ssh ab@host.docker.internal 'ls -la ${PROJECT_DIR}/artifactsb/'"
 
                             // Build the Docker image on the Docker host
-                            sh "ssh -v -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
+                            sh "ssh ab@host.docker.internal 'cd ${PROJECT_DIR} && docker build -f backend.Dockerfile -t ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} .'"
 
                         }
                         // Log in to DockerHub and push the image
                         withCredentials([usernamePassword(credentialsId: 'dockerhub1', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh """
-                                echo '${DOCKER_PASSWORD}' | ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
-                                ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
+                                echo '${DOCKER_PASSWORD}' | ssh ab@host.docker.internal 'docker login -u ${DOCKER_USERNAME} --password-stdin' > /dev/null 2>&1
+                                ssh ab@host.docker.internal 'docker push ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'
                             """
                         }
 
@@ -202,13 +204,13 @@ pipeline {
             steps {
                 script {
                     // Wrapping the SSH commands in a single SSH session
-                    sshagent(['sshtoaws']) {
+                    sshagent(['jenkinaccess']) {
                         // Execute Trivy scan and echo the scanning process
-                        sh "ssh -i /var/jenkins_home/greenworld.pem ubuntu@10.3.1.91 'trivy image --download-db-only && \
+                        sh "ssh ab@host.docker.internal 'trivy image --download-db-only && \
                         echo \"Scanning ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} with Trivy...\" && \
                         trivy image --format json --output \"/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json\" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}'"
                         // Correctly execute scp within a sh command block
-                        sh "scp ubuntu@10.3.1.91:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
+                        sh "scp ab@host.docker.internal:/opt/docker-green/Trivy/trivy-report--${env.BUILD_NUMBER}.json ."
 
                         // Use double quotes for string interpolation
                         archiveArtifacts artifacts: "trivy-report--${env.BUILD_NUMBER}.json", onlyIfSuccessful: true
@@ -224,7 +226,7 @@ pipeline {
                     switch (ENVIRONMENT) {
                         case 'Demo':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['sshtoaws']) {
+                            sshagent(['jenkinaccess']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
@@ -239,7 +241,7 @@ pipeline {
               
                         case 'Testing':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['sshtoaws']) {
+                            sshagent(['jenkinaccess']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
@@ -254,13 +256,13 @@ pipeline {
                            
                         case 'Production':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['sshtoaws']) {
+                            sshagent(['jenkinaccess']) {
                                 sh """
-                                    ssh -o StrictHostKeyChecking=no ubuntu@18.191.147.35 '
+                                    ssh -o StrictHostKeyChecking=no ab@Production-host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
                                     docker stop projectname-backend-v2 || true &&
                                     docker rm projectname-backend-v2 || true &&
-                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
+                                    docker run -d --name projectname-backend-v2 -p 6969:6969 -e MONGO_URI=MONGO_URI="${MONGO_URI}" ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER}
                                     '
                                 """
                             }
@@ -269,7 +271,7 @@ pipeline {
                             
                         case 'Staging':
                         withCredentials([string(credentialsId: 'MONGO_URI', variable: 'MONGO_URI_SECRET')]) {
-                            sshagent(['sshtoaws']) {
+                            sshagent(['jenkinaccess']) {
                                 sh """
                                     ssh -o StrictHostKeyChecking=no ab@Staging-host.docker.internal '
                                     docker pull ${env.DOCKER_IMAGEE}:${env.ENVIRONMENT.toLowerCase()}-backend-${env.BUILD_NUMBER} &&
